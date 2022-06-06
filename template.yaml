@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 15
+
+Outputs:
+  InstitutionApiGateway:
+    Description: "API Gateway endpoint URL for Save User function"
+    Value: !Sub "https://${InstitutionApiGateway}.execute-api.${AWS::Region}.amazonaws.com/"
+  InstitutionServiceFunction:
+    Description: "Manage institution"
+    Value: !GetAtt InstitutionServiceFunction.Arn
+  InstitutionServiceFunctionIAMRole:
+    Description: "Implicit IAM Role created for Save Institution Function"
+    Value: !GetAtt InstitutionServiceFunctionIAMRole.Arn
+
+Resources:
+  InstitutionServiceFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      FunctionName: InstitutionServiceFunction
+      Handler: not.used.in.provided.runtime
+        # Layers:
+      # - !Ref PollLayer
+      Runtime: provided
+      MemorySize: 512
+      CodeUri: target/function.zip
+      Role: !GetAtt InstitutionServiceFunctionIAMRole.Arn
+      Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
+        Variables:
+          RUN_ENVIRONMENT: prod
+      Events:
+        HelloWorld:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /{proxy+}
+            Method: any
+            RestApiId: !Ref InstitutionApiGateway
+  InstitutionApiGateway:
+    Type: "AWS::Serverless::Api"
+    Properties:
+      StageName: stage
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+
+  InstitutionApiGatewayLambdaPermission:
+    DependsOn: InstitutionServiceFunction
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: lambda:InvokeFunction
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${InstitutionApiGateway}/*"
+      FunctionName: InstitutionServiceFunction
+      Principal: apigateway.amazonaws.com
+
+  InstitutionServiceFunctionIAMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
+        - "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "sts:AssumeRole"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+
+  # PollLayer:
+  #   Type: AWS::Serverless::LayerVersion
+  #   Properties:
+  #     LayerName: PollLayer
+  #     Description: Dependencies for poll lambda
+  #     ContentUri: poll_layer/
+  #     CompatibleRuntimes:
+  #       - java8
+  #     LicenseInfo: 'MIT'
+  #     RetentionPolicy: Retain
